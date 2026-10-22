@@ -1,10 +1,13 @@
-"""OpenCode 1.x: SQLite opencode.db (session/message/part). Writes go through `opencode import`."""
+"""OpenCode: SQLite opencode.db (session/message/part). 1.x writes go through `opencode import`; 2.x is seeded."""
+import functools
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
 import string
+import subprocess
 import sys
 
 from .. import hookkit
@@ -55,7 +58,17 @@ def sig(c, sid):
 
 
 class OpenCode(Agent):
-    key, name, aliases, binary, writable = 'oc', 'OpenCode', ('opencode',), 'opencode', True
+    key, name, aliases, binary = 'oc', 'OpenCode', ('opencode',), 'opencode'
+
+    @functools.cached_property
+    def writable(self):
+        # OpenCode 2.x removed `opencode import` (and --pure), so hop can only seed it.
+        try:
+            out = run_quiet([binary(), '--version'], timeout=15).stdout
+        except (HopError, OSError, subprocess.SubprocessError):
+            return True
+        m = re.search(r'(\d+)\.\d+', out)
+        return not m or int(m.group(1)) < 2
 
     def detect(self):
         return os.path.exists(DB) or super().detect()
@@ -80,6 +93,8 @@ class OpenCode(Agent):
 
     def read(self, s, cfg):
         c = connect()
+        if not c:
+            return []
         try:
             order, msgs, parts = [], {}, {}
             for mid, data in c.execute('select id, data from message where session_id=? order by time_created, id',
@@ -122,6 +137,8 @@ class OpenCode(Agent):
                 ctx['oc_model'] = {'providerID': provider, 'modelID': model, '_version': '1.0.0'}
             else:
                 c = connect()
+                if not c:
+                    raise HopError(f'OpenCode database not found at {DB}; set OPENCODE_DB_PATH')
                 try:
                     row = c.execute("select json_extract(data, '$.model') from message where "
                                     "json_extract(data, '$.role')='user' order by time_created desc limit 1").fetchone()
@@ -183,6 +200,8 @@ class OpenCode(Agent):
 
     def retitle(self, cp, title):
         c = connect(rw=True)
+        if not c:
+            return False
         try:
             c.execute('update session set title=? where id=?', (title, cp['id']))
             c.commit()
@@ -197,7 +216,7 @@ class OpenCode(Agent):
         return ['opencode', '-s', sid]
 
     def seed_cmd(self, prompt):
-        return ['opencode', prompt]
+        return ['opencode', '--prompt', prompt]
 
     def install(self, dry):
         src = ('// SameThread: after each OpenCode turn, mirror chats into the other agent CLIs.\n'

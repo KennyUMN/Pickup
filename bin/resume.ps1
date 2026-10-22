@@ -1,1 +1,1 @@
-& bun run "$PSScriptRoot\..\tui\index.tsx" @args
+& bun "$PSScriptRoot\resume.js" @args

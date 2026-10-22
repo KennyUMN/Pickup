@@ -143,7 +143,7 @@ def cmd_resume(args):
         sys.exit('No matching chat. See: hop list')
     copies = [k for k in th['copies'] if k.startswith(key + ':')]
     if copies:
-        best = max(copies, key=lambda k: (th['copies'][k]['upto'], th['copies'][k]['owned']))
+        best = max(copies, key=lambda k: (th['copies'][k]['upto'], not th['copies'][k]['owned']))
         launch(agent.resume_cmd(best.split(':', 1)[1]), th['cwd'])
     if agent.writable:
         try:
@@ -154,8 +154,9 @@ def cmd_resume(args):
                 th['copies'][f'{key}:{sid}'] = {'owned': True, 'seen': seen, 'sig': sig, 'upto': len(th['elements']), 'title': thread_title(th)}
                 write_json(os.path.join(THREAD_DIR, th['tid'] + '.json'), th)
                 launch(agent.resume_cmd(sid), th['cwd'])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f'Could not write a {agent.name} session ({e}); starting a new one with the transcript instead.',
+                  file=sys.stderr)
     seed(agent, th)
 
 

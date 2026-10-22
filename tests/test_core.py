@@ -333,5 +333,83 @@ class RegressionTests(unittest.TestCase):
         self.assertIn('patched auth.py', cmd[2])
 
 
+class ClaudeAgyRoundTrip(unittest.TestCase):
+    """Claude chat -> seeded into agy -> agy adds turns -> back in Claude with those turns."""
+
+    def test_claude_to_agy_and_back(self):
+        import sqlite3
+        import time
+        from unittest.mock import patch
+        from samethread import cli
+        from samethread.agents import claude
+        cfg = dict(CFG, targets=['cc'])
+        work = os.path.join(TMP, 'roundtrip')
+        os.makedirs(work, exist_ok=True)
+        now = core.now_ms()
+
+        # 1. A Claude Code chat.
+        sid = '11111111-2222-3333-4444-555555555555'
+        cc_path = os.path.join(claude.PROJECTS, claude.slug(work), sid + '.jsonl')
+        os.makedirs(os.path.dirname(cc_path), exist_ok=True)
+        base = {'isSidechain': False, 'entrypoint': 'cli', 'cwd': work, 'sessionId': sid, 'version': '2.1.0'}
+        with open(cc_path, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(dict(base, type='user', uuid='u1', parentUuid=None, timestamp=core.ms_iso(now - 5000),
+                                    message={'role': 'user', 'content': 'CC-ASK fix the login bug'})) + '\n')
+            f.write(json.dumps(dict(base, type='assistant', uuid='a1', parentUuid='u1', timestamp=core.ms_iso(now - 4000),
+                                    message={'role': 'assistant', 'content': [{'type': 'text', 'text': 'CC-REPLY patched auth.py'}]})) + '\n')
+        sync.Sync(cfg).run()
+        th = next(t for t in cli.all_threads() if t['copies'].get('cc:' + sid))
+
+        # 2. Switch to agy: hop seeds a new agy chat with a handoff marker.
+        with patch('samethread.cli.launch') as launch:
+            cli.seed(AGENTS['agy'], th)
+        cmd = launch.call_args[0][0]
+        self.assertEqual(cmd[:2], ['agy', '-i'])
+        self.assertIn('CC-REPLY patched auth.py', cmd[2])
+
+        # 3. agy runs that prompt, then the user keeps going in agy.
+        from samethread.agents import antigravity
+        cid = 'agy-conv-1'
+        logs = os.path.join(antigravity.ROOT, 'brain', cid, '.system_generated', 'logs')
+        os.makedirs(logs, exist_ok=True)
+        steps = [
+            {'step_index': 0, 'type': 'USER_INPUT', 'created_at': core.ms_iso(now), 'content': f'<USER_REQUEST>{cmd[2]}</USER_REQUEST>'},
+            {'step_index': 1, 'type': 'PLANNER_RESPONSE', 'created_at': core.ms_iso(now + 1000), 'content': 'Ready, we were fixing login.'},
+            {'step_index': 2, 'type': 'USER_INPUT', 'created_at': core.ms_iso(now + 2000), 'content': '<USER_REQUEST>AGY-ASK add a test</USER_REQUEST>'},
+            {'step_index': 3, 'type': 'PLANNER_RESPONSE', 'created_at': core.ms_iso(now + 3000), 'content': 'AGY-REPLY added test_login.py'},
+        ]
+        with open(os.path.join(logs, 'transcript_full.jsonl'), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(json.dumps(x) for x in steps))
+        c = sqlite3.connect(os.path.join(antigravity.ROOT, 'conversation_summaries.db'))
+        c.execute('create table if not exists conversation_summaries (conversation_id, title, last_modified_time, '
+                  'workspace_uris, parent_conversation_id, nesting_depth)')
+        c.execute('insert into conversation_summaries values (?, ?, ?, ?, NULL, 0)',
+                  (cid, 'Login fix', core.ms_iso(now + 3000), json.dumps(['file://' + work])))
+        c.commit()
+        c.close()
+        time.sleep(0.01)
+        sync.Sync(cfg).run()
+
+        # 4. The agy chat joined the same thread, and Claude got a mirror with agy's turns.
+        th = core.read_json(os.path.join(core.THREAD_DIR, th['tid'] + '.json'), None)
+        self.assertIn('agy:' + cid, th['copies'])
+        texts = [x['text'] for x in th['elements']]
+        self.assertIn('AGY-REPLY added test_login.py', texts)
+        self.assertFalse(any('[hop-handoff:' in t for t in texts))
+
+        # 5. Switching back to Claude resumes the mirror that holds agy's turns.
+        args = type('Args', (), {'agent': 'cc', 'query': th['tid'], 'all': True})()
+        with patch('samethread.cli.launch', side_effect=SystemExit) as launch, self.assertRaises(SystemExit):
+            cli.cmd_resume(args)
+        resumed = launch.call_args[0][0]
+        self.assertEqual(resumed[:2], ['claude', '--resume'])
+        self.assertNotEqual(resumed[2], sid)
+        mirror = th['copies']['cc:' + resumed[2]]
+        with open(mirror['path'], encoding='utf-8') as f:
+            body = f.read()
+        self.assertIn('CC-ASK fix the login bug', body)
+        self.assertIn('AGY-REPLY added test_login.py', body)
+
+
 if __name__ == '__main__':
     unittest.main()

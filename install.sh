@@ -32,15 +32,18 @@ cd "$TARGET_DIR"
 echo "Setting up OpenTUI and agent hooks..."
 bun install --silent
 npm link --silent 2>/dev/null || true
-$PYTHON_CMD -m pip install -e . --quiet
+# Own venv: avoids PEP 668 "externally-managed-environment" on Homebrew/Debian Python
+$PYTHON_CMD -m venv "$TARGET_DIR/.venv"
+"$TARGET_DIR/.venv/bin/python" -m pip install -e . --quiet
 
 # Link binary to ~/.local/bin or /usr/local/bin
 mkdir -p "$HOME/.local/bin"
 ln -sf "$TARGET_DIR/bin/resume.js" "$HOME/.local/bin/resume"
+ln -sf "$TARGET_DIR/.venv/bin/hop" "$HOME/.local/bin/hop"
 chmod +x "$TARGET_DIR/bin/resume.js" "$HOME/.local/bin/resume"
 
 # Run hop install (wires hooks and auto-syncs existing chats)
-hop install || true
+"$HOME/.local/bin/hop" install || true
 
 echo -e "\n\033[0;32mPickup installed successfully!\033[0m"
 echo "Type 'resume' anywhere in your terminal to start."

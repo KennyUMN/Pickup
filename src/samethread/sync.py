@@ -387,6 +387,7 @@ def wait_lock(seconds=60):
     while True:
         try:
             fd = os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
             os.close(fd)
             return True
         except FileExistsError:
