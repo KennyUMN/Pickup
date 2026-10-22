@@ -1,4 +1,5 @@
 import React from 'react';
+import { TextAttributes } from '@opentui/core';
 import type { AgentInfo, AgentKey, ThreadItem } from '../types.ts';
 
 interface AgentPickerProps {
@@ -18,18 +19,18 @@ export function AgentPicker({
 }: AgentPickerProps) {
   return (
     <box flexDirection="column" flexGrow={1}>
-      <text bold color="#FFFFFF" marginBottom={1}>
+      <text attributes={TextAttributes.BOLD} fg="#FFFFFF" marginBottom={1}>
         {`Resume: ${thread.baseTitle}`}
       </text>
-      <text dim color="#737373" marginBottom={1}>
+      <text attributes={TextAttributes.DIM} fg="#737373" marginBottom={1}>
         {`Directory: ${thread.cwd}`}
       </text>
-      <text bold color="#FFFFFF" marginBottom={1}>
+      <text attributes={TextAttributes.BOLD} fg="#FFFFFF" marginBottom={1}>
         Select agent to resume with (press 1-9, ↑/↓, or Enter):
       </text>
 
       {errorMessage && (
-        <text bold color="#F87171" marginBottom={1}>
+        <text attributes={TextAttributes.BOLD} fg="#F87171" marginBottom={1}>
           {`  ⚠  ${errorMessage}`}
         </text>
       )}
@@ -63,8 +64,8 @@ export function AgentPicker({
               onMouseDown={() => onSelect && onSelect(agent.key)}
             >
               <text
-                bold={isSelected}
-                color={textColor}
+                attributes={isSelected ? TextAttributes.BOLD : TextAttributes.NONE}
+                fg={textColor}
               >
                 {line}
               </text>
@@ -73,7 +74,7 @@ export function AgentPicker({
         })}
       </box>
 
-      <text dim color="#737373">
+      <text attributes={TextAttributes.DIM} fg="#737373">
         [Enter] Launch   [1-9] Quick Pick   [Esc] Back to list
       </text>
     </box>

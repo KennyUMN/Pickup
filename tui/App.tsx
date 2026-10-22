@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import type { AgentInfo, AgentKey, ThreadItem, ViewMode } from './types.ts';
 import { detectAgents, filterThreads, loadAllThreads, runSync } from './data.ts';
@@ -32,6 +32,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
   const [pickerError, setPickerError] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const isSyncingRef = useRef<boolean>(false);
 
   const dimensions = useTerminalDimensions();
   const height = dimensions.height || 24;
@@ -43,12 +44,14 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
   }, [allThreads, searchQuery, scopeAll, currentCwd]);
 
   const selectedThread: ThreadItem | null =
-    filteredThreads.length > 0
-      ? filteredThreads[Math.min(selectedIndex, filteredThreads.length - 1)]
+    filteredThreads.length > 0 && selectedIndex >= 0
+      ? filteredThreads[Math.max(0, Math.min(selectedIndex, filteredThreads.length - 1))]
       : null;
 
   // Background sync
   const handleSync = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     setIsSyncing(true);
     setStatusMessage('Syncing...');
     try {
@@ -59,6 +62,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
     } catch {
       setStatusMessage('Sync failed');
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
       setTimeout(() => setStatusMessage(''), 2500);
     }
@@ -147,7 +151,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
       }
 
       // Manual sync hotkey
-      if ((key.ctrl && key.name === 's') || (!searchQuery && (key.sequence === 's' || key.sequence === 'S'))) {
+      if (key.ctrl && key.name === 's') {
         handleSync();
         return;
       }
@@ -215,7 +219,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
       flexDirection="column"
       width="100%"
       height="100%"
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor="#404040"
       padding={1}
     >
