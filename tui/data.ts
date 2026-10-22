@@ -441,13 +441,12 @@ export async function runSync(): Promise<{ success: boolean; message: string }> 
   return new Promise((resolve) => {
     const child = spawn(
       pythonCmd,
-      [
-        '-c',
-        `import sys; sys.path.insert(0, r'${path.join(universalResumeDir, 'src')}'); from samethread.cli import main; sys.argv=['hop', 'sync', '-q']; main()`
-      ],
+      ['-m', 'samethread', 'sync', '-q'],
       {
         cwd: universalResumeDir,
         stdio: 'ignore',
+        // PYTHONPATH instead of an inline -c script, so quotes in the repo path cannot break it
+        env: { ...process.env, PYTHONPATH: path.join(universalResumeDir, 'src') + path.delimiter + (process.env.PYTHONPATH || '') },
       }
     );
 
@@ -473,13 +472,12 @@ export function runSyncSync(): boolean {
   try {
     const res = spawnSync(
       pythonCmd,
-      [
-        '-c',
-        `import sys; sys.path.insert(0, r'${path.join(universalResumeDir, 'src')}'); from samethread.cli import main; sys.argv=['hop', 'sync', '-q']; main()`
-      ],
+      ['-m', 'samethread', 'sync', '-q'],
       {
         cwd: universalResumeDir,
         stdio: 'ignore',
+        // PYTHONPATH instead of an inline -c script, so quotes in the repo path cannot break it
+        env: { ...process.env, PYTHONPATH: path.join(universalResumeDir, 'src') + path.delimiter + (process.env.PYTHONPATH || '') },
       }
     );
     return res.status === 0;

@@ -32,15 +32,17 @@ try {
     & bun install --silent
     & npm link --silent 2>$null
     & python -m pip install -e . --quiet
-    & hop install
+    # Python's Scripts\ folder is often not on PATH, so call the module directly
+    & python -m samethread install
 } finally {
     Pop-Location
 }
 
-# Ensure resume wrapper is globally available in user npm
-$npmDir = "$env:APPDATA\npm"
-if (Test-Path $npmDir) {
-    Copy-Item -Force "$targetDir\bin\resume.cmd" "$npmDir\resume.cmd"
+# Put resume and hop on PATH: Bun's bin folder is on PATH once Bun is installed; npm's only with Node
+$binDirs = @("$env:USERPROFILE\.bun\bin", "$env:APPDATA\npm") | Where-Object { Test-Path $_ }
+foreach ($dir in $binDirs) {
+    Copy-Item -Force "$targetDir\bin\resume.cmd" "$dir\resume.cmd"
+    Set-Content -Path "$dir\hop.cmd" -Value "@python -m samethread %*" -Encoding ASCII
 }
 
 Write-Host "`nPickup installed successfully!" -ForegroundColor Green

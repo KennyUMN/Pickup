@@ -66,9 +66,13 @@ class OpenCode(Agent):
         try:
             out = run_quiet([binary(), '--version'], timeout=15).stdout
         except (HopError, OSError, subprocess.SubprocessError):
-            return True
+            return False
         m = re.search(r'(\d+)\.\d+', out)
         return not m or int(m.group(1)) < 2
+
+    @property
+    def pure(self):
+        return ['--pure'] if self.writable else []  # 2.x rejects --pure
 
     def detect(self):
         return os.path.exists(DB) or super().detect()
@@ -184,8 +188,8 @@ class OpenCode(Agent):
         exe = binary()
         try:
             if cp:
-                run_quiet([exe, 'session', 'delete', sid, '--pure'])
-            r = run_quiet([exe, 'import', tmp, '--pure'], cwd=cwd)
+                run_quiet([exe, 'session', 'delete', sid] + self.pure)
+            r = run_quiet([exe, 'import', tmp] + self.pure, cwd=cwd)
             if 'Imported session' not in (r.stdout + r.stderr):
                 raise HopError(f'opencode import failed: {(r.stderr or r.stdout).strip()[-300:]}')
         finally:
@@ -210,7 +214,7 @@ class OpenCode(Agent):
         return True
 
     def delete(self, cp):
-        run_quiet([binary(), 'session', 'delete', cp['id'], '--pure'])
+        run_quiet([binary(), 'session', 'delete', cp['id']] + self.pure)
 
     def resume_cmd(self, sid):
         return ['opencode', '-s', sid]

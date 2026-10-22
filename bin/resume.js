@@ -27,6 +27,11 @@ const tuiResult = spawnSync('bun', ['run', tuiEntry, ...process.argv.slice(2)], 
   },
 });
 
+if (tuiResult.error) {
+  console.error(`Could not start the Pickup TUI with bun: ${tuiResult.error.message}`);
+  process.exit(1);
+}
+
 // If TUI exited non-zero or was aborted, exit
 if (tuiResult.status !== 0) {
   process.exit(tuiResult.status ?? 0);

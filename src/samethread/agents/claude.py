@@ -133,6 +133,7 @@ class Claude(Agent):
         return els
 
     def write(self, cp, cwd, msgs, title, ctx):
+        cwd = cwd or HOME
         sid = cp['id'] if cp else str(uuid.uuid4())
         path = cp['path'] if cp else os.path.join(PROJECTS, slug(cwd), sid + '.jsonl')
         base = {'isSidechain': False, 'userType': 'external', 'entrypoint': 'cli', 'cwd': cwd, 'sessionId': sid,

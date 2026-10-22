@@ -104,7 +104,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
       }
 
       if (key.name === 'down' || (key.ctrl && key.name === 'n')) {
-        setSelectedIndex((i) => Math.min(filteredThreads.length - 1, i + 1));
+        setSelectedIndex((i) => Math.max(0, Math.min(filteredThreads.length - 1, i + 1)));
         return;
       }
 
@@ -114,7 +114,7 @@ export function App({ currentCwd, initialQuery = '', onLaunch, onExit }: AppProp
       }
 
       if (key.name === 'pagedown') {
-        setSelectedIndex((i) => Math.min(filteredThreads.length - 1, i + 10));
+        setSelectedIndex((i) => Math.max(0, Math.min(filteredThreads.length - 1, i + 10)));
         return;
       }
 

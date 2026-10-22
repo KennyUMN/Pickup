@@ -148,7 +148,11 @@ class Sync:
                 break
             if AGENTS[s['tool']].writable or key in self.idx['copies'] or s['updated'] < min(pending.values()):
                 continue
-            els = self.load(s)
+            try:
+                els = self.load(s)
+            except Exception as e:
+                log(f'! could not read {key}: {e}')
+                continue
             first = next((e for e in els if e['role'] == 'user'), None)
             m = first and HANDOFF_RE.search(first['text'])
             th = m and self.thread(m.group(1))
@@ -187,7 +191,15 @@ class Sync:
                     del th['copies'][key]
                     self.idx['copies'].pop(key, None)
                     self.touched.add(tid)
+                elif not cp.get('gone'):
+                    # Not listed any more: deleted, or an adapter that cannot see it. Mark it (reversibly)
+                    # so resume stops opening a dead session, but keep the link in case it comes back.
+                    log(f'- {NAMES.get(tool, tool)} original is missing: "{th["base_title"]}"')
+                    cp['gone'] = True
+                    self.touched.add(tid)
                 continue
+            if cp.pop('gone', None):
+                self.touched.add(tid)
             if s['sig'] == cp.get('sig'):
                 continue
             try:
@@ -384,6 +396,7 @@ def locked_sync(cfg, days=None, dry=False):
 
 def wait_lock(seconds=60):
     deadline = time.time() + seconds
+    os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
     while True:
         try:
             fd = os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)

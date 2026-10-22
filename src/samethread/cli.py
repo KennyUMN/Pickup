@@ -60,7 +60,9 @@ def shown(cmd):
 
 
 def launch(cmd, cwd):
-    exe = shutil.which(cmd[0]) or cmd[0]
+    exe = shutil.which(cmd[0])
+    if not exe:
+        sys.exit(f'{cmd[0]} is not on PATH. Install it or open the chat with: {shown(cmd)}')
     use_shell = sys.platform == 'win32' and exe.lower().endswith(('.cmd', '.bat'))
     sys.exit(subprocess.call([exe] + cmd[1:], cwd=cwd if cwd and os.path.isdir(cwd) else None, shell=use_shell))
 
@@ -141,7 +143,7 @@ def cmd_resume(args):
     th = pick(scoped(args), args.query) or (pick(all_threads(), args.query) if args.query else None)
     if not th:
         sys.exit('No matching chat. See: hop list')
-    copies = [k for k in th['copies'] if k.startswith(key + ':')]
+    copies = [k for k in th['copies'] if k.startswith(key + ':') and not th['copies'][k].get('gone')]
     if copies:
         best = max(copies, key=lambda k: (th['copies'][k]['upto'], not th['copies'][k]['owned']))
         launch(agent.resume_cmd(best.split(':', 1)[1]), th['cwd'])
@@ -150,13 +152,20 @@ def cmd_resume(args):
             cfg = load_config()
             res = agent.write(None, th['cwd'], render(th, cfg), thread_title(th), {})
             if res:
-                sid, seen, sig = res['id'], res['seen'], res['sig']
-                th['copies'][f'{key}:{sid}'] = {'owned': True, 'seen': seen, 'sig': sig, 'upto': len(th['elements']), 'title': thread_title(th)}
+                sid = res['id']
+                # Keep every field write() returned (path, dir...): delete/retitle need them.
+                th['copies'][f'{key}:{sid}'] = dict(res, owned=True, upto=len(th['elements']), title=thread_title(th))
                 write_json(os.path.join(THREAD_DIR, th['tid'] + '.json'), th)
-                launch(agent.resume_cmd(sid), th['cwd'])
+                # Register it so sync scans it; otherwise turns typed in this session never sync back.
+                idx = read_json(INDEX_PATH, {})
+                idx.setdefault('copies', {})[f'{key}:{sid}'] = th['tid']
+                write_json(INDEX_PATH, idx)
         except Exception as e:
             print(f'Could not write a {agent.name} session ({e}); starting a new one with the transcript instead.',
                   file=sys.stderr)
+            res = None
+        if res:
+            launch(agent.resume_cmd(res['id']), th['cwd'])
     seed(agent, th)
 
 
@@ -206,7 +215,10 @@ def cmd_forget(args):
         th['suppressed'], th['forgotten'] = list(AGENTS), True
         write_json(os.path.join(THREAD_DIR, th['tid'] + '.json'), th)
     finally:
-        os.remove(LOCK_PATH)
+        try:
+            os.remove(LOCK_PATH)
+        except OSError:
+            pass
     print(f'Deleted the mirrors of "{thread_title(th)}" and stopped mirroring it. The original is untouched.')
 
 
@@ -326,8 +338,10 @@ def main_resume_tui():
         except Exception:
             pass
 
+    # `hop tui` / `hop ui` must not pass the subcommand on as a search query
+    extra = sys.argv[2:] if sys.argv[1:2] in (['tui'], ['ui']) else sys.argv[1:]
     if bun_exe and os.path.exists(tui_script):
-        cmd = [bun_exe, 'run', tui_script] + sys.argv[1:]
+        cmd = [bun_exe, 'run', tui_script] + extra
         env = dict(os.environ, RESUME_RUNNER='1')
         try:
             ret = subprocess.call(cmd, env=env)
@@ -349,7 +363,7 @@ def main_resume_tui():
         sys.exit(0)
     else:
         # Fallback to standard hop list
-        sys.argv = ['hop', 'list'] + sys.argv[1:]
+        sys.argv = ['hop', 'list'] + extra
         main()
 
 

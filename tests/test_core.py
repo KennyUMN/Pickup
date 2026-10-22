@@ -1,5 +1,8 @@
 import json
 import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -409,6 +412,97 @@ class ClaudeAgyRoundTrip(unittest.TestCase):
             body = f.read()
         self.assertIn('CC-ASK fix the login bug', body)
         self.assertIn('AGY-REPLY added test_login.py', body)
+
+
+def tearDownModule():
+    shutil.rmtree(TMP, ignore_errors=True)
+
+
+class StableReleaseRegressions(unittest.TestCase):
+    def test_fallback_element_id_is_same_in_every_process(self):
+        code = 'from samethread import core; print(core.el(None, "user", "same text", 1000)["id"])'
+        src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src')
+        ids = {subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                              env=dict(os.environ, PYTHONPATH=src, PYTHONHASHSEED=seed)).stdout.strip()
+               for seed in ('1', '2', '3')}
+        self.assertEqual(len(ids), 1, ids)
+
+    def _agy_only_thread(self, cid, text):
+        """An agy chat synced with no mirror targets, so Claude has no copy yet."""
+        import sqlite3
+        from samethread.agents import antigravity
+        now = core.now_ms()
+        work = os.path.join(TMP, 'w-' + cid)
+        os.makedirs(work, exist_ok=True)
+        logs = os.path.join(antigravity.ROOT, 'brain', cid, '.system_generated', 'logs')
+        os.makedirs(logs, exist_ok=True)
+        with open(os.path.join(logs, 'transcript_full.jsonl'), 'w', encoding='utf-8') as f:
+            f.write(json.dumps({'step_index': 0, 'type': 'USER_INPUT', 'created_at': core.ms_iso(now),
+                                'content': f'<USER_REQUEST>{text}</USER_REQUEST>'}) + '\n')
+            f.write(json.dumps({'step_index': 1, 'type': 'PLANNER_RESPONSE', 'created_at': core.ms_iso(now + 1),
+                                'content': 'ok'}) + '\n')
+        c = sqlite3.connect(os.path.join(antigravity.ROOT, 'conversation_summaries.db'))
+        c.execute('create table if not exists conversation_summaries (conversation_id, title, last_modified_time, '
+                  'workspace_uris, parent_conversation_id, nesting_depth)')
+        c.execute('insert into conversation_summaries values (?, ?, ?, ?, NULL, 0)',
+                  (cid, text, core.ms_iso(now + 1), json.dumps(['file://' + work])))
+        c.commit()
+        c.close()
+        sync.Sync(dict(CFG, targets=[])).run()
+        from samethread import cli
+        return next(t for t in cli.all_threads() if t['copies'].get('agy:' + cid))
+
+    def test_session_created_by_resume_syncs_new_turns_back(self):
+        from unittest.mock import patch
+        from samethread import cli
+        th = self._agy_only_thread('agy-resume-1', 'RESUME-ORIGIN question')
+        args = type('Args', (), {'agent': 'cc', 'query': th['tid'], 'all': True})()
+        with patch('samethread.cli.launch', side_effect=SystemExit) as launch, self.assertRaises(SystemExit):
+            cli.cmd_resume(args)
+        sid = launch.call_args[0][0][2]
+        th = core.read_json(os.path.join(core.THREAD_DIR, th['tid'] + '.json'), None)
+        cp = th['copies']['cc:' + sid]
+        self.assertTrue(os.path.exists(cp['path']))
+        self.assertEqual(core.read_json(core.INDEX_PATH, {})['copies']['cc:' + sid], th['tid'])
+
+        with open(cp['path'], encoding='utf-8') as f:
+            last = [json.loads(x) for x in f if x.strip() and json.loads(x).get('uuid')][-1]
+        with open(cp['path'], 'a', encoding='utf-8') as f:
+            f.write(json.dumps({'type': 'user', 'uuid': 'typed-in-claude', 'parentUuid': last['uuid'],
+                                'sessionId': sid, 'cwd': th['cwd'], 'entrypoint': 'cli', 'isSidechain': False,
+                                'timestamp': core.ms_iso(core.now_ms() + 5000),
+                                'message': {'role': 'user', 'content': 'TYPED-IN-RESUMED-CLAUDE'}}) + '\n')
+        sync.Sync(dict(CFG, targets=['cc'])).run()
+        th = core.read_json(os.path.join(core.THREAD_DIR, th['tid'] + '.json'), None)
+        self.assertIn('TYPED-IN-RESUMED-CLAUDE', [e['text'] for e in th['elements']])
+
+    def test_missing_original_is_skipped_by_resume_and_restored_if_it_returns(self):
+        from unittest.mock import patch
+        from samethread import cli
+        from samethread.agents import antigravity
+        th = self._agy_only_thread('agy-deleted-1', 'DELETED-ORIGIN question')
+        brain = os.path.join(antigravity.ROOT, 'brain', 'agy-deleted-1')
+        os.rename(brain, brain + '.away')
+        sync.Sync(dict(CFG, targets=[])).run()
+        th = core.read_json(os.path.join(core.THREAD_DIR, th['tid'] + '.json'), None)
+        self.assertTrue(th['copies']['agy:agy-deleted-1'].get('gone'))
+        args = type('Args', (), {'agent': 'agy', 'query': th['tid'], 'all': True})()
+        with patch('samethread.cli.launch', side_effect=SystemExit) as launch, self.assertRaises(SystemExit):
+            cli.cmd_resume(args)
+        self.assertNotEqual(launch.call_args[0][0][:2], ['agy', '--conversation'])
+
+        os.rename(brain + '.away', brain)
+        sync.Sync(dict(CFG, targets=[])).run()
+        th = core.read_json(os.path.join(core.THREAD_DIR, th['tid'] + '.json'), None)
+        self.assertNotIn('gone', th['copies']['agy:agy-deleted-1'])
+
+    def test_hop_tui_does_not_pass_subcommand_as_query(self):
+        from unittest.mock import patch
+        from samethread import cli
+        with patch.object(sys, 'argv', ['hop', 'tui']), patch('samethread.cli.shutil.which', return_value='/bin/bun'), \
+                patch('samethread.cli.subprocess.call', return_value=1) as call, self.assertRaises(SystemExit):
+            cli.main_resume_tui()
+        self.assertNotIn('tui', call.call_args[0][0][3:])
 
 
 if __name__ == '__main__':

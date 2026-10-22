@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import zlib
 
 HOME = os.path.expanduser('~')
 HOP_DIR = os.environ.get('HOP_HOME') or os.path.join(HOME, '.hop')
@@ -189,7 +190,8 @@ def remap(cfg, path):
 
 def el(id_, role, text, ts, kind='msg'):
     if id_ is None or str(id_).strip() == '' or str(id_).strip() == 'None':
-        id_str = f'{role}:{ts}:{hash(text) & 0xffffffff:x}'
+        # crc32, not hash(): str hashes change per process, which re-added every turn on each sync
+        id_str = f'{role}:{ts}:{zlib.crc32((text or "").encode("utf-8")):x}'
     else:
         id_str = str(id_)
     return {'id': id_str, 'role': role, 'text': text, 'ts': ts or 0, 'kind': kind}
@@ -210,6 +212,8 @@ def text_of(parts):
     """Text from the many 'content' shapes agents use: str, [{'text'}], [{'type':'text','text'}]."""
     if isinstance(parts, str):
         return parts
+    if isinstance(parts, dict):
+        parts = [parts]
     out = []
     for p in parts or []:
         if isinstance(p, str):

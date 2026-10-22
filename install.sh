@@ -45,5 +45,21 @@ chmod +x "$TARGET_DIR/bin/resume.js" "$HOME/.local/bin/resume"
 # Run hop install (wires hooks and auto-syncs existing chats)
 "$HOME/.local/bin/hop" install || true
 
+# ~/.local/bin is not on PATH by default on macOS and some Linux distros
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *)
+    case "$(basename "${SHELL:-}")" in
+      zsh) RC="$HOME/.zshrc" ;;
+      bash) [ "$(uname)" = "Darwin" ] && RC="$HOME/.bash_profile" || RC="$HOME/.bashrc" ;;
+      *) RC="$HOME/.profile" ;;
+    esac
+    if ! grep -qs 'Added by Pickup' "$RC"; then
+      printf '\n# Added by Pickup\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"
+    fi
+    echo "Added ~/.local/bin to PATH in $RC. Open a new terminal (or run: source $RC)."
+    ;;
+esac
+
 echo -e "\n\033[0;32mPickup installed successfully!\033[0m"
 echo "Type 'resume' anywhere in your terminal to start."
