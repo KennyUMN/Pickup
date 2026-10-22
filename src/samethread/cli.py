@@ -10,6 +10,7 @@ State lives in ~/.hop: config.json, index.json, threads/<id>.json, hop.log.
 """
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys

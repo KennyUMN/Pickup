@@ -320,6 +320,18 @@ class RegressionTests(unittest.TestCase):
             # Must not raise ValueError: list.index(x): x not in list
             cli.cmd_list(args)
 
+    def test_seed_into_agy_builds_handoff_prompt(self):
+        from samethread import cli
+        from unittest.mock import patch
+        th = thread([e('1', 'user', 'fix the login bug', author='cc'), e('2', 'assistant', 'patched auth.py', author='cc')])
+        with patch('samethread.cli.launch') as launch:
+            cli.seed(AGENTS['agy'], th)
+        cmd = launch.call_args[0][0]
+        self.assertEqual(cmd[:2], ['agy', '-i'])
+        self.assertTrue(cmd[2].startswith(f'[hop-handoff:{th["tid"]}]'))
+        self.assertIn('fix the login bug', cmd[2])
+        self.assertIn('patched auth.py', cmd[2])
+
 
 if __name__ == '__main__':
     unittest.main()
