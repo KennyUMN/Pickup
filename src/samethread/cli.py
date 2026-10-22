@@ -232,7 +232,7 @@ def cmd_install(args, remove=False):
         if remove:
             print('\nHooks removed. Mirrors stay; delete them with `hop clean --yes`.')
         else:
-            print('\nHooks installed. Universal Resume keeps your chats synced automatically.')
+            print('\nHooks installed. Pickup keeps your chats synced automatically.')
             try:
                 locked_sync(load_config(), 365, False)
             except Exception:

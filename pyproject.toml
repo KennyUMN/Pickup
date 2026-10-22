@@ -29,8 +29,8 @@ samethread = "samethread.cli:main"
 resume = "samethread.cli:main_resume_tui"
 
 [project.urls]
-Homepage = "https://github.com/AliSharjeell/UniversalResume"
-Issues = "https://github.com/AliSharjeell/UniversalResume/issues"
+Homepage = "https://github.com/KennyUMN/Pickup"
+Issues = "https://github.com/KennyUMN/Pickup/issues"
 
 [tool.setuptools.dynamic]
 version = { attr = "samethread.__version__" }

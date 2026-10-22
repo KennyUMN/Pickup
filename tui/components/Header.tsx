@@ -25,7 +25,7 @@ export function Header({
     <box flexDirection="column" marginBottom={1}>
       {/* Monochrome ASCII Branding */}
       <box marginBottom={1}>
-        <ascii-font text="UNIVERSAL RESUME" font="tiny" color="#FFFFFF" />
+        <ascii-font text="PICKUP" font="tiny" color="#FFFFFF" />
       </box>
 
       {/* Scope Switcher */}

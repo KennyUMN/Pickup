@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo -e "\033[1;37mInstalling UniversalResume...\033[0m"
+echo -e "\033[1;37mInstalling Pickup...\033[0m"
 
 # Check for Python
 if ! command -v python3 &>/dev/null && ! command -v python &>/dev/null; then
@@ -25,7 +25,7 @@ if [ -d "$TARGET_DIR" ]; then
   git -C "$TARGET_DIR" pull --quiet
 else
   echo "Cloning repository to $TARGET_DIR..."
-  git clone --quiet https://github.com/AliSharjeell/UniversalResume.git "$TARGET_DIR"
+  git clone --quiet https://github.com/KennyUMN/Pickup.git "$TARGET_DIR"
 fi
 
 cd "$TARGET_DIR"
@@ -42,5 +42,5 @@ chmod +x "$TARGET_DIR/bin/resume.js" "$HOME/.local/bin/resume"
 # Run hop install (wires hooks and auto-syncs existing chats)
 hop install || true
 
-echo -e "\n\033[0;32mUniversalResume installed successfully!\033[0m"
+echo -e "\n\033[0;32mPickup installed successfully!\033[0m"
 echo "Type 'resume' anywhere in your terminal to start."

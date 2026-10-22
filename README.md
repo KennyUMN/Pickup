@@ -1,14 +1,14 @@
-<h1 align="center">Universal Resume</h1>
+<h1 align="center">Pickup</h1>
 
 <p align="center">
-Type <code>resume</code> in any terminal. See all your coding conversations across agents. Pick any chat, choose which agent you want to resume it with, and keep coding without missing a beat—even when an agent hits its usage limit.
+A resume for your LLM chats. Type <code>resume</code> in any terminal, see every coding conversation across 15 agents, and pick it up in whichever agent you want—even when one hits its usage limit.
 </p>
 
 <p align="center">
   <img src="assets/1-hit-usage-limit.png" width="49%" alt="Hit agent usage limit" />
-  <img src="assets/2-universal-resume-tui.png" width="49%" alt="Universal Resume TUI" />
+  <img src="assets/2-universal-resume-tui.png" width="49%" alt="Pickup TUI" />
   <br>
-  <sub>Hit usage limit &nbsp;&bull;&nbsp; Universal Resume session list</sub>
+  <sub>Hit usage limit &nbsp;&bull;&nbsp; Pickup session list</sub>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@ Type <code>resume</code> in any terminal. See all your coding conversations acro
 </p>
 
 <p align="center">
-Built with <a href="https://github.com/anomalyco/opentui">OpenTUI</a>.
+Built with <a href="https://github.com/anomalyco/opentui">OpenTUI</a>. Forked from <a href="https://github.com/AliSharjeell/UniversalResume">Universal Resume</a>.
 </p>
 
 ---
@@ -28,12 +28,12 @@ Built with <a href="https://github.com/anomalyco/opentui">OpenTUI</a>.
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/AliSharjeell/UniversalResume/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/KennyUMN/Pickup/main/install.ps1 | iex
 ```
 
 ### macOS & Linux (Terminal)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AliSharjeell/UniversalResume/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KennyUMN/Pickup/main/install.sh | bash
 ```
 
 Once installed, just write:
@@ -43,7 +43,7 @@ resume
 
 ---
 
-## Why Universal Resume?
+## Why Pickup?
 
 - **Hit rate limits on Claude?** Instantly switch to **Codex**, **Cursor CLI**, **Grok Build**, or **Antigravity**.
 - **Started in Codex?** Hop into **Claude Code**, **DeepSeek Harness**, **Hermes**, or **OpenClaw** with full history and context preserved.
@@ -98,4 +98,4 @@ resume
 
 ## License
 
-MIT © [Ali Sharjeel](https://github.com/AliSharjeell)
+MIT © [KennyUMN](https://github.com/KennyUMN). Based on [Universal Resume](https://github.com/AliSharjeell/UniversalResume) by [Ali Sharjeel](https://github.com/AliSharjeell).

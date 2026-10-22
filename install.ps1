@@ -1,7 +1,7 @@
-# UniversalResume / SameThread one-line installer for Windows
+# Pickup one-line installer for Windows
 $ErrorActionPreference = "Stop"
 
-Write-Host "Installing UniversalResume..." -ForegroundColor White
+Write-Host "Installing Pickup..." -ForegroundColor White
 
 # Check for Python
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -22,7 +22,7 @@ if (Test-Path $targetDir) {
     git -C $targetDir pull --quiet
 } else {
     Write-Host "Cloning repository to $targetDir..." -ForegroundColor DarkGray
-    git clone --quiet https://github.com/AliSharjeell/UniversalResume.git $targetDir
+    git clone --quiet https://github.com/KennyUMN/Pickup.git $targetDir
 }
 
 # Install dependencies and link
@@ -43,5 +43,5 @@ if (Test-Path $npmDir) {
     Copy-Item -Force "$targetDir\bin\resume.cmd" "$npmDir\resume.cmd"
 }
 
-Write-Host "`nUniversalResume installed successfully!" -ForegroundColor Green
+Write-Host "`nPickup installed successfully!" -ForegroundColor Green
 Write-Host "Type 'resume' anywhere in your terminal to start."
