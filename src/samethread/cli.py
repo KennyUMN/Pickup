@@ -3,8 +3,9 @@
 Every chat is mirrored into the other agents' own session stores, so each agent's native
 resume picker lists it, titled with the agents that wrote it: "Fix login (Agy)",
 "Fix login (Agy+Claude)". Originals are never modified; hop only rewrites mirrors it created.
-Agents hop can't write into (Antigravity, MiniMax Code) are reached with `hop resume <agent>`,
-which seeds a new conversation from the transcript.
+A hop into any agent writes the chat into that agent's own store first and then opens it
+with the agent's own resume command; `hop resume <agent> --handoff` seeds a conversation
+instead.
 
 State lives in ~/.hop: config.json, index.json, threads/<id>.json, hop.log.
 """
@@ -17,8 +18,8 @@ import sys
 
 from . import __version__
 from .agents import AGENTS, NAMES, resolve, targets
-from .core import (HANDOFF_DIR, HOP_DIR, INDEX_PATH, LOCK_PATH, THREAD_DIR, ago, load_config, now_ms, read_json, same_path,
-                   settings, write_json)
+from .core import (HANDOFF_DIR, HOP_DIR, INDEX_PATH, LOCK_PATH, THREAD_DIR, ago, load_config, log, now_ms, read_json,
+                   same_path, settings, write_json)
 from .sync import detach, locked_sync, render, tag, thread_title, wait_lock
 
 
@@ -145,12 +146,31 @@ def cmd_resume(args):
         sys.exit('No matching chat. See: hop list')
     copies = [k for k in th['copies'] if k.startswith(key + ':') and not th['copies'][k].get('gone')]
     if copies:
-        best = max(copies, key=lambda k: (th['copies'][k]['upto'], not th['copies'][k]['owned']))
-        launch(agent.resume_cmd(best.split(':', 1)[1]), th['cwd'])
-    if agent.writable:
+        best = max(copies, key=lambda k: (th['copies'][k]['upto'], th['copies'][k]['owned']))
+        cp = th['copies'][best]
+        old_sid = best.split(':', 1)[1]
+        if cp.get('upto', 0) < len(th['elements']) and agent.can_copy and not getattr(args, 'handoff', False):
+            try:
+                cfg = load_config()
+                write_target = dict(cp, id=old_sid) if cp.get('owned') else None
+                res = agent.write(write_target, th['cwd'], render(th, cfg), thread_title(th), {'cfg': cfg})
+                if res:
+                    sid = res['id']
+                    th['copies'][f'{key}:{sid}'] = dict(res, owned=True, upto=len(th['elements']), title=thread_title(th))
+                    write_json(os.path.join(THREAD_DIR, th['tid'] + '.json'), th)
+                    idx = read_json(INDEX_PATH, {})
+                    idx.setdefault('copies', {})[f'{key}:{sid}'] = th['tid']
+                    write_json(INDEX_PATH, idx)
+                    launch(agent.resume_cmd(sid), th['cwd'])
+                    return
+            except Exception as e:
+                log(f'! {agent.name} native copy update failed for "{th["base_title"]}": {e}')
+        launch(agent.resume_cmd(old_sid), th['cwd'])
+        return
+    if agent.can_copy and not getattr(args, 'handoff', False):
         try:
             cfg = load_config()
-            res = agent.write(None, th['cwd'], render(th, cfg), thread_title(th), {})
+            res = agent.write(None, th['cwd'], render(th, cfg), thread_title(th), {'cfg': cfg})
             if res:
                 sid = res['id']
                 # Keep every field write() returned (path, dir...): delete/retitle need them.
@@ -166,6 +186,7 @@ def cmd_resume(args):
             res = None
         if res:
             launch(agent.resume_cmd(res['id']), th['cwd'])
+            return
     seed(agent, th)
 
 
@@ -175,7 +196,7 @@ def cmd_agents(args):
     print(f'{"agent":<10} {"installed":<10} {"mirrors":<9} resume')
     for key, agent in AGENTS.items():
         found = agent.detect()
-        mode = 'written' if key in writable else ('seeded' if not agent.writable else '-')
+        mode = 'written' if key in writable else ('copied' if agent.can_copy else ('seeded' if not agent.writable else '-'))
         print(f'{agent.name:<10} {"yes" if found else "no":<10} {mode if found else "-":<9} hop resume {key}')
 
 
@@ -292,12 +313,14 @@ def main():
     p.set_defaults(fn=cmd_sync)
 
     for name, fn, hlp in (('list', cmd_list, 'show chats for this folder and how to resume them'),
-                          ('resume', cmd_resume, 'open a chat in any agent (seeds a new one where hop cannot write)'),
+                          ('resume', cmd_resume, 'open a chat in any agent (native copy, seeded handoff only as a fallback)'),
                           ('agy', cmd_resume, 'shortcut for: hop resume agy'),
                           ('forget', cmd_forget, "delete a chat's mirrors and stop mirroring it")):
         p = sub.add_parser(name, help=hlp)
         if name == 'resume':
             p.add_argument('agent', help=f'{", ".join(AGENTS)} (or the full name)')
+            p.add_argument('--handoff', action='store_true',
+                           help='skip the native copy and seed a new conversation instead')
         if name == 'agy':
             p.set_defaults(agent='agy')
         if name != 'list':
