@@ -12,6 +12,9 @@ from .base import Agent
 ROOT = os.path.join(HOME, '.claude')
 PROJECTS = os.path.join(ROOT, 'projects')
 SETTINGS = os.path.join(ROOT, 'settings.json')
+# Claude Code skips this model name when restoring the session model on resume.
+SYNTHETIC_MODEL = '<synthetic>'
+HOP_MSG_PREFIX = 'msg_hop_'
 NOISE_RE = re.compile(r'<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr)>.*?</\1>', re.S)
 
 
@@ -79,7 +82,8 @@ class Claude(Agent):
                 meta['cwd'] = meta['cwd'] or r.get('cwd')
                 meta['entrypoint'] = meta['entrypoint'] or r.get('entrypoint')
                 meta['version'] = r.get('version') or meta['version']
-                if t == 'assistant' and (r.get('message') or {}).get('model') == HOP_MODEL:
+                msg = r.get('message') or {}
+                if t == 'assistant' and (msg.get('model') == HOP_MODEL or str(msg.get('id', '')).startswith(HOP_MSG_PREFIX)):
                     s['is_hop'] = True
 
         chain, u, guard = [], leaf, set()
@@ -145,8 +149,8 @@ class Claude(Agent):
             if m['role'] == 'user':
                 r['message'] = {'role': 'user', 'content': m['text']}
             else:
-                r['message'] = {'id': 'msg_hop_' + uuid.uuid4().hex[:24], 'type': 'message', 'role': 'assistant',
-                                'model': HOP_MODEL, 'content': [{'type': 'text', 'text': m['text']}],
+                r['message'] = {'id': HOP_MSG_PREFIX + uuid.uuid4().hex[:24], 'type': 'message', 'role': 'assistant',
+                                'model': SYNTHETIC_MODEL, 'content': [{'type': 'text', 'text': m['text']}],
                                 'stop_reason': 'end_turn', 'stop_sequence': None,
                                 'usage': {'input_tokens': 0, 'output_tokens': 0}}
             lines.append(r)
