@@ -108,6 +108,24 @@ class RoundTrip(unittest.TestCase):
         with open(res['path'], encoding='utf-8') as f:
             self.assertIn('"customTitle":"Auth refactor (Agy)"', f.read())  # Claude's tail scan needs compact JSON
 
+    def test_claude_migrates_a_legacy_hop_import_mirror(self):
+        agent, res = self.roundtrip('cc', os.getcwd())
+        with open(res['path'], encoding='utf-8') as f:
+            legacy = f.read().replace('"model":"<synthetic>"', '"model":"hop-import"')
+        with open(res['path'], 'w', encoding='utf-8', newline='') as f:
+            f.write(legacy)
+        os.utime(res['path'], (1_700_000_000, 1_700_000_000))
+        self.assertTrue(agent.migrate(res))
+        with open(res['path'], encoding='utf-8') as f:
+            body = f.read()
+        self.assertNotIn('hop-import', body)
+        self.assertIn('"model":"<synthetic>"', body)
+        self.assertEqual(int(os.path.getmtime(res['path'])), 1_700_000_000)
+        s = agent.list(CFG)[f'cc:{res["id"]}']
+        sync.load(s, CFG)
+        self.assertTrue(s['is_hop'])
+        self.assertFalse(agent.migrate(res))
+
     def test_codex(self):
         self.roundtrip('codex', os.getcwd())
 
@@ -412,6 +430,21 @@ class ClaudeAgyRoundTrip(unittest.TestCase):
             body = f.read()
         self.assertIn('CC-ASK fix the login bug', body)
         self.assertIn('AGY-REPLY added test_login.py', body)
+        self.assertIn('"model":"<synthetic>"', body)
+
+        # 6. A mirror written by an older hop (model "hop-import") is upgraded in place on the next sync.
+        with open(mirror['path'], 'w', encoding='utf-8', newline='') as f:
+            f.write(body.replace('"model":"<synthetic>"', '"model":"hop-import"'))
+        path = os.path.join(core.THREAD_DIR, th['tid'] + '.json')
+        legacy = core.read_json(path, None)
+        legacy['copies']['cc:' + resumed[2]].pop('fmt', None)
+        core.write_json(path, legacy)
+        sync.Sync(cfg).run()
+        with open(mirror['path'], encoding='utf-8') as f:
+            upgraded = f.read()
+        self.assertNotIn('hop-import', upgraded)
+        self.assertIn('"model":"<synthetic>"', upgraded)
+        self.assertEqual(core.read_json(path, None)['copies']['cc:' + resumed[2]]['fmt'], sync.MIRROR_FORMAT)
 
 
 def tearDownModule():
