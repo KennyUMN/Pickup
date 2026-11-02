@@ -166,6 +166,24 @@ class Claude(Agent):
         append_line(cp['path'], {'type': 'custom-title', 'customTitle': title, 'sessionId': cp['id']})
         return True
 
+    def migrate(self, cp):
+        # Mirrors written before SYNTHETIC_MODEL carry model "hop-import", which Claude Code rejects on resume.
+        path = lp(cp['path'])
+        if not os.path.exists(path):
+            return False
+        old = '"model":"%s"' % HOP_MODEL
+        with open(path, encoding='utf-8', newline='') as f:
+            text = f.read()
+        if old not in text:
+            return False
+        st = os.stat(path)
+        tmp = path + '.hoptmp'
+        with open(tmp, 'w', encoding='utf-8', newline='') as f:
+            f.write(text.replace(old, '"model":"%s"' % SYNTHETIC_MODEL))
+        os.replace(tmp, path)
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+        return True
+
     def delete(self, cp):
         if os.path.exists(lp(cp['path'])):
             os.remove(lp(cp['path']))

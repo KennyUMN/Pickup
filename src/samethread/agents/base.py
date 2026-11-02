@@ -79,6 +79,10 @@ class Agent:
     def retitle(self, cp, title):
         return False
 
+    def migrate(self, cp):
+        """Upgrade a mirror this tool wrote earlier to the current on-disk format. Returns True if it changed."""
+        return False
+
     def delete(self, cp):
         pass
 

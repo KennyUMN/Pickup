@@ -8,12 +8,13 @@ import uuid
 from collections import Counter
 
 from .agents import AGENTS, NAMES, targets
-from .core import (HANDOFF_DIR, HOME, INDEX_PATH, LOCK_PATH, PENDING_PATH, THREAD_DIR, HopError, clip, dedup, log,
+from .core import (HANDOFF_DIR, HOME, INDEX_PATH, LOCK_PATH, PENDING_PATH, THREAD_DIR, HopError, clip, dedup, file_sig, log,
                    now_ms, read_json, write_json)
 
 _names = '|'.join(re.escape(n) for n in NAMES.values())
 TAG_RE = re.compile(rf'\s*\((?:{_names})(?:\+(?:{_names}))*\)\s*$')
 HANDOFF_RE = re.compile(r'\[hop-handoff:([0-9a-f]+)\]')
+MIRROR_FORMAT = 2  # 2: Claude mirrors carry model <synthetic>, not hop-import
 
 
 def load(s, cfg):
@@ -169,6 +170,17 @@ class Sync:
         if not self.dry:
             write_json(path, pending)
 
+    def upgrade(self, tid, key, cp, s):
+        """Bring a mirror written by an older hop up to the current on-disk format, once."""
+        try:
+            if AGENTS[key.split(':')[0]].migrate(cp):
+                s['sig'] = cp['sig'] = file_sig(cp['path'])
+        except Exception as e:
+            log(f'! could not upgrade {key}: {e}')
+            return
+        cp['fmt'] = MIRROR_FORMAT
+        self.touched.add(tid)
+
     def scan_copies(self):
         grown = {}
         for key, tid in list(self.idx['copies'].items()):
@@ -200,6 +212,8 @@ class Sync:
                 continue
             if cp.pop('gone', None):
                 self.touched.add(tid)
+            if cp['owned'] and cp.get('fmt') != MIRROR_FORMAT and not self.dry:
+                self.upgrade(tid, key, cp, s)
             if s['sig'] == cp.get('sig'):
                 continue
             try:
