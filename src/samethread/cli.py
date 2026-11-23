@@ -165,6 +165,11 @@ def cmd_resume(args):
                     return
             except Exception as e:
                 log(f'! {agent.name} native copy update failed for "{th["base_title"]}": {e}')
+        if cp.get('owned'):
+            try:
+                agent.migrate(dict(cp, id=old_sid))
+            except Exception as e:
+                log(f'! {agent.name} mirror migration failed for "{th["base_title"]}": {e}')
         launch(agent.resume_cmd(old_sid), th['cwd'])
         return
     if agent.can_copy and not getattr(args, 'handoff', False):

@@ -14,7 +14,7 @@ from .core import (HANDOFF_DIR, HOME, INDEX_PATH, LOCK_PATH, PENDING_PATH, THREA
 _names = '|'.join(re.escape(n) for n in NAMES.values())
 TAG_RE = re.compile(rf'\s*\((?:{_names})(?:\+(?:{_names}))*\)\s*$')
 HANDOFF_RE = re.compile(r'\[hop-handoff:([0-9a-f]+)\]')
-MIRROR_FORMAT = 2  # 2: Claude mirrors carry model <synthetic>, not hop-import
+MIRROR_FORMAT = 3  # 3: Antigravity trajectory DBs have user_version=1, WAL, and step indexes
 
 
 def load(s, cfg):

@@ -283,6 +283,10 @@ class AntigravityNativeCopy(unittest.TestCase):
         # Check trajectory db
         conv_db = os.path.join(self.tmp, 'conversations', cid + '.db')
         c = sqlite3.connect(conv_db)
+        self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 1)
+        self.assertEqual(c.execute('PRAGMA journal_mode').fetchone()[0].lower(), 'wal')
+        indexes = {r[0] for r in c.execute("select name from sqlite_master where type='index'").fetchall()}
+        self.assertTrue({'idx_steps_status', 'idx_steps_step_type'} <= indexes)
         meta = c.execute('select * from trajectory_meta').fetchall()
         self.assertEqual(len(meta), 1)
         meta_blob = c.execute('select * from trajectory_metadata_blob').fetchall()
@@ -307,6 +311,31 @@ class AntigravityNativeCopy(unittest.TestCase):
         self.assertIsNone(row3)
         c.close()
         self.assertFalse(os.path.exists(conv_db))
+
+    def test_migrate_initializes_legacy_trajectory_db(self):
+        import sqlite3
+        agent = AGENTS['agy']
+        res = agent.write(None, os.getcwd(), MSGS, 'CI is red', {'cfg': CFG})
+        conv_db = os.path.join(self.tmp, 'conversations', res['id'] + '.db')
+
+        # Simulate a legacy mirror created before user_version/indexes were set
+        c = sqlite3.connect(conv_db)
+        c.execute('PRAGMA journal_mode=DELETE')
+        c.execute('DROP INDEX idx_steps_status')
+        c.execute('DROP INDEX idx_steps_step_type')
+        c.execute('PRAGMA user_version=0')
+        c.commit()
+        c.close()
+
+        self.assertTrue(agent.migrate({'id': res['id']}))
+        self.assertFalse(agent.migrate({'id': res['id']}))
+
+        c = sqlite3.connect(conv_db)
+        self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 1)
+        self.assertEqual(c.execute('PRAGMA journal_mode').fetchone()[0].lower(), 'wal')
+        indexes = {r[0] for r in c.execute("select name from sqlite_master where type='index'").fetchall()}
+        self.assertTrue({'idx_steps_status', 'idx_steps_step_type'} <= indexes)
+        c.close()
 
 
 class HopResumeNativeCopy(unittest.TestCase):

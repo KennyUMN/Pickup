@@ -25,6 +25,7 @@ HDR_RE = re.compile(r'^(Created At|Completed At):.*\n?', re.M)
 USER_STEP = 14        # step_type of a user message
 PLANNER_STEP = 15     # step_type of an agent message
 STEP_STATUS_DONE = 3
+TRAJECTORY_USER_VERSION = 1
 
 TRAJECTORY_SCHEMA = [
     'CREATE TABLE `trajectory_meta` (`trajectory_id` text,`cascade_id` text,`trajectory_type` integer,'
@@ -33,12 +34,22 @@ TRAJECTORY_SCHEMA = [
     '`has_subtrajectory` numeric NOT NULL DEFAULT false,`metadata` blob,`error_details` blob,`permissions` blob,'
     '`task_details` blob,`render_info` blob,`step_payload` blob,`step_format` integer NOT NULL DEFAULT 0,'
     'PRIMARY KEY (`idx`))',
+    'CREATE INDEX `idx_steps_status` ON `steps`(`status`)',
+    'CREATE INDEX `idx_steps_step_type` ON `steps`(`step_type`)',
     'CREATE TABLE `gen_metadata` (`idx` integer,`data` blob,`size` integer NOT NULL DEFAULT 0,PRIMARY KEY (`idx`))',
     'CREATE TABLE `executor_metadata` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))',
     'CREATE TABLE `parent_references` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))',
     'CREATE TABLE `trajectory_metadata_blob` (`id` text DEFAULT "main",`data` blob,PRIMARY KEY (`id`))',
     'CREATE TABLE `battle_mode_infos` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))',
 ]
+
+
+def _init_trajectory_schema(conn):
+    conn.execute('PRAGMA journal_mode=WAL')
+    for sql in TRAJECTORY_SCHEMA:
+        conn.execute(sql.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS')
+                        .replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'))
+    conn.execute(f'PRAGMA user_version={TRAJECTORY_USER_VERSION}')
 
 
 def transcript(cid):
@@ -169,8 +180,7 @@ class Antigravity(Agent):
         os.makedirs(lp(os.path.dirname(path)), exist_ok=True)
         c = sqlite3.connect(path, timeout=20)
         try:
-            for sql in TRAJECTORY_SCHEMA:
-                c.execute(sql.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+            _init_trajectory_schema(c)
             c.execute('delete from steps')
             c.execute('delete from trajectory_meta')
             c.execute('delete from trajectory_metadata_blob')
@@ -308,6 +318,25 @@ class Antigravity(Agent):
                        json.dumps([ws_uri]), 'CASCADE_RUN_STATUS_IDLE', '', 'default-cli-project', '',
                        '', 0, db_stamp(last), user_step, 'antigravity-cli', raw_summary))
             c.commit()
+        finally:
+            c.close()
+
+    def migrate(self, cp):
+        # Older mirrors left trajectory DBs at user_version=0, which agy rejects as "trajectory db is not initialized".
+        cid = cp.get('id')
+        if not cid:
+            return False
+        path = lp(os.path.join(ROOT, 'conversations', cid + '.db'))
+        if not os.path.exists(path):
+            return False
+        c = sqlite3.connect(path, timeout=20)
+        try:
+            version = c.execute('PRAGMA user_version').fetchone()[0]
+            if version >= TRAJECTORY_USER_VERSION:
+                return False
+            _init_trajectory_schema(c)
+            c.commit()
+            return True
         finally:
             c.close()
 
